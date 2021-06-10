@@ -1,4 +1,5 @@
-// Copyright (C) 2013-2020 CEA/DEN
+//////////////////////////////////////////////////////////////
+// Copyright (C) 2013-2020 CEA/DES
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published
@@ -12,13 +13,13 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
-
+//////////////////////////////////////////////////////////////
 /*!
-  \file   PMMLlib.cxx
-  \author Incka
-  \date   Wed Nov 20 11:04:17 2013
+ \file   PMMLlib.cxx
+ \author Incka
+ \date   Wed Nov 20 11:04:17 2013
 
-  \brief  Implémentation de la classe PMMLlib
+ \brief  Implémentation de la classe PMMLlib
 
  */
 
@@ -29,9 +30,12 @@
 #include <stdlib.h>
 
 // includes C++
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <libxml/xpathInternals.h>
+#include <numeric>
 #include <sstream>
 
 using namespace std;
@@ -57,6 +61,7 @@ PMMLlib::PMMLlib(std::string file, bool log)
     : _log(log), _pmmlFile(file), _doc(NULL), _rootNode(NULL),
       _currentNode(NULL), _nbModels(0), _currentModelName(""),
       _currentModelType(kUNDEFINED) {
+    std::cout << "PMML Constructor: " << file << std::endl;
     try {
         xmlKeepBlanksDefault(0);
         xmlInitParser();
@@ -97,6 +102,28 @@ PMMLlib::~PMMLlib() {
         cout << "~PMMLlib" << endl;
 }
 
+void PMMLlib::SearchForModel(PMMLType &modelType, std::string &modelName) {
+    std::vector<PMMLType> ModelTypeList;
+
+    modelType = kUNDEFINED;
+
+    GetModelTypeList(ModelTypeList);
+    for (unsigned int i = 0; i < ModelTypeList.size(); i++) {
+        std::string name = GetTypeString(ModelTypeList[i]);
+        // std::cout << "Looking ModelName: " << name << std::endl;
+        xmlNodePtr node = GetChildByName(_rootNode, name);
+        if (node != NULL) {
+            modelType = ModelTypeList[i];
+            modelName = _getProp(node, string("modelName"));
+            break;
+        } else {
+            // std::cout << "Not Found!!" << std::endl;
+        }
+    }
+    // std::cout << "SearchForModel: " << modelType << "," << modelName <<
+    // std::endl;
+}
+
 /**
  * Set the current model and its type.
  * @param modelName Name of the model to load (ie content of 'modelName'
@@ -112,6 +139,12 @@ void PMMLlib::SetCurrentModel(std::string modelName, PMMLType type) {
         break;
     case kLR:
         _currentModelNode = GetRegressionPtr(modelName);
+        break;
+    case kGAUSS:
+        _currentModelNode = GetGaussianProcessPtr(modelName);
+        break;
+    case kBAYESIAN:
+        _currentModelNode = GetBayesianNetPtr(modelName);
         break;
     default:
         throw string("Unknown PMML type.");
@@ -177,6 +210,14 @@ void PMMLlib::SetCurrentModel() {
         _currentModelType = kLR;
     }
     if (_currentModelNode == NULL) {
+        _currentModelNode = GetChildByName(_rootNode, "GaussianProcessModel");
+        _currentModelType = kLR;
+    }
+    if (_currentModelNode == NULL) {
+        _currentModelNode = GetChildByName(_rootNode, "BayesianNetworkModel");
+        _currentModelType = kLR;
+    }
+    if (_currentModelNode == NULL) {
         string msg("Couldn't get node in SetCurrentModel().");
         throw msg;
     }
@@ -207,7 +248,7 @@ void PMMLlib::printLog() const {
 /**
  * Set the root node in the tree:
  * @code
- * <PMML version="4.1" xmlns="http://www.dmg.org/PMML-4_1">
+ * <PMML version="4.3" xmlns="http://www.dmg.org/PMML-4_3">
  * @endcode
  */
 void PMMLlib::SetRootNode() {
@@ -220,8 +261,8 @@ void PMMLlib::SetRootNode() {
     xmlFree(xp);
 
     xmlNewProp(_rootNode, (const xmlChar *)"xmlns",
-               (const xmlChar *)"http://www.dmg.org/PMML-4_1");
-    xmlNewProp(_rootNode, (const xmlChar *)"version", (const xmlChar *)"4.1");
+               (const xmlChar *)"http://www.dmg.org/PMML-4_3");
+    xmlNewProp(_rootNode, (const xmlChar *)"version", (const xmlChar *)"4.3");
 
     xmlDocSetRootElement(_doc, _rootNode);
 }
@@ -287,25 +328,35 @@ void PMMLlib::AddMiningSchema(std::string name, std::string usageType) {
  * @return Pointer to the node found
  */
 xmlNodePtr PMMLlib::GetChildByName(xmlNodePtr node, std::string nodeName) {
+    std::string strName("");
+    bool res;
+
     if (node == NULL)
         return node;
 
     xmlNodePtr childNode = node->children;
+
     if (childNode == NULL)
         return childNode;
 
     const xmlChar *name = childNode->name;
-    string strName("");
+
     if (name != NULL)
         strName = _xmlCharToString(name);
+    // std::cout << "Item: " << strName << std::endl;
 
     while ((childNode != NULL) && (strName != nodeName)) {
         childNode = childNode->next;
         if (childNode == NULL)
             return childNode;
+
         name = childNode->name;
         if (name != NULL)
             strName = _xmlCharToString(name);
+
+        // res = (strName == nodeName);
+        // std::cout << nodeName << " Item: " << strName << " " << res <<
+        // std::endl;
     }
     return childNode;
 }
@@ -316,10 +367,31 @@ xmlNodePtr PMMLlib::GetChildByName(xmlNodePtr node, std::string nodeName) {
  */
 void PMMLlib::CountModels() {
     int nCount = 0;
-    nCount = CountNeuralNetModels() + CountRegressionModels();
+    // nCount = CountNeuralNetModels() + CountRegressionModels();
+    nCount = CountOccurenceModel("NeuralNetwork") +
+             CountOccurenceModel("RegressionModel") +
+             CountOccurenceModel("GaussianProcessModel") +
+             CountOccurenceModel("BayesianNetworkModel");
+
     if (_log)
         cout << " ** End Of Count Models nCount[" << nCount << "]" << endl;
     _nbModels = nCount;
+}
+
+int PMMLlib::CountOccurenceModel(std::string model) {
+    int nCount = 0;
+    xmlNodePtr ptr = GetChildByName(_rootNode, model.c_str());
+    // Count the models
+    while (ptr != NULL && _xmlCharToString(ptr->name) == model) {
+        nCount++;
+        if (_log)
+            cout << " ** " << model << ": nCount[" << nCount << "]" << endl;
+        ptr = ptr->next;
+    }
+    if (_log)
+        cout << " ** " << model << ": End Of CountOccurenceModel[" << nCount
+             << "]" << endl;
+    return nCount;
 }
 
 /**
@@ -328,9 +400,11 @@ void PMMLlib::CountModels() {
  */
 int PMMLlib::CountNeuralNetModels() {
     int nCount = 0;
+    /*
     xmlNodePtr ptr = GetChildByName(_rootNode, "NeuralNetwork");
     // Count the models
-    while (ptr != NULL && _xmlCharToString(ptr->name) == "NeuralNetwork") {
+    while (ptr != NULL && _xmlCharToString(ptr->name) == "NeuralNetwork")
+    {
         nCount++;
         if (_log)
             cout << " ** nCount[" << nCount << "]" << endl;
@@ -338,6 +412,8 @@ int PMMLlib::CountNeuralNetModels() {
     }
     if (_log)
         cout << " ** End Of CountNetworks nCount[" << nCount << "]" << endl;
+    */
+    nCount = CountOccurenceModel("NeuralNetwork");
     return nCount;
 }
 
@@ -347,9 +423,11 @@ int PMMLlib::CountNeuralNetModels() {
  */
 int PMMLlib::CountRegressionModels() {
     int nCount = 0;
+    /*
     xmlNodePtr ptr = GetChildByName(_rootNode, "RegressionModel");
     // Count the models
-    while (ptr != NULL && _xmlCharToString(ptr->name) == "RegressionModel") {
+    while (ptr != NULL && _xmlCharToString(ptr->name) == "RegressionModel")
+    {
         nCount++;
         if (_log)
             cout << " ** nCount[" << nCount << "]" << endl;
@@ -357,6 +435,28 @@ int PMMLlib::CountRegressionModels() {
     }
     if (_log)
         cout << " ** End Of CountRegressions nCount[" << nCount << "]" << endl;
+    */
+    nCount = CountOccurenceModel("RegressionModel");
+    return nCount;
+}
+
+/**
+ * Count GaussianProcess models tags in the PMML file.
+ * @return Number of models
+ */
+int PMMLlib::CountGaussianProcessModels() {
+    int nCount = 0;
+    nCount = CountOccurenceModel("GaussianProcessModel");
+    return nCount;
+}
+
+/**
+ * Count GaussianProcess models tags in the PMML file.
+ * @return Number of models
+ */
+int PMMLlib::CountBayesianNetModels() {
+    int nCount = 0;
+    nCount = CountOccurenceModel("BayesianNetworkModel");
     return nCount;
 }
 
@@ -406,6 +506,7 @@ xmlNodePtr PMMLlib::GetPtr(int index, std::string name) {
  * @return Pointer to the node found
  */
 xmlNodePtr PMMLlib::GetPtr(std::string myModelName, std::string nodeName) {
+
     xmlNodePtr node = NULL;
     if (_doc != NULL) {
         node = GetChildByName(_rootNode, nodeName);
@@ -429,18 +530,55 @@ xmlNodePtr PMMLlib::GetPtr(std::string myModelName, std::string nodeName) {
  */
 std::string PMMLlib::GetTypeString() {
     string name = "";
-    switch (_currentModelType) {
+    name = GetTypeString(_currentModelType);
+    /*
+    switch (_currentModelType)
+    {
     case kANN:
         name = "NeuralNetwork";
         break;
     case kLR:
         name = "RegressionModel";
         break;
+    case kGAUSS:
+      name = "GaussianProcessModel";
+        break;
+    case kBAYESIAN:
+      name = "BayesianNetworkModel";
+        break;
+    default:
+        throw string("Unknown PMML type.");
+        break;
+    }
+    */
+    return name;
+}
+std::string PMMLlib::GetTypeString(PMMLType modelType) {
+    string name = "";
+    switch (modelType) {
+    case kANN:
+        name = "NeuralNetwork";
+        break;
+    case kLR:
+        name = "RegressionModel";
+        break;
+    case kGAUSS:
+        name = "GaussianProcessModel";
+        break;
+    case kBAYESIAN:
+        name = "BayesianNetworkModel";
+        break;
     default:
         throw string("Unknown PMML type.");
         break;
     }
     return name;
+}
+void PMMLlib::GetModelTypeList(std::vector<PMMLType> &ModelTypeList) {
+    ModelTypeList.push_back(kANN);
+    ModelTypeList.push_back(kLR);
+    ModelTypeList.push_back(kGAUSS);
+    ModelTypeList.push_back(kBAYESIAN);
 }
 
 /**
@@ -457,6 +595,10 @@ PMMLType PMMLlib::GetCurrentModelType() {
         type = kANN;
     else if (name == "RegressionModel")
         type = kLR;
+    else if (name == "GaussianProcessModel")
+        type = kGAUSS;
+    else if (name == "BayesianNetworkModel")
+        type = kBAYESIAN;
     return type;
 }
 
@@ -1237,7 +1379,7 @@ void PMMLlib::AddDataField(std::string fieldName, std::string displayName,
 
 /**
  * Add a NeuralNetwork node to the root node
-  * @brief Specific to NeuralNetwork
+ * @brief Specific to NeuralNetwork
  * @param modelName Model name
  * @param functionName PMMLMiningFunction. One of : kREGRESSION.
  */
@@ -1267,17 +1409,17 @@ void PMMLlib::AddNeuralNetwork(std::string modelName,
 }
 
 /**
-* Add a NeuralInput node to the current model.
+ * Add a NeuralInput node to the current model.
  * @brief Specific to NeuralNetwork
-* @param id Id of the input
-* @param inputName Name of the input
-* @param optype Value of property "optype"
-* @param dataType Value of property "dataType"
-* @param orig1 Value of the first origin
-* @param norm1 Value of the first norm
-* @param orig2 Value of the second origin
-* @param norm2 Value of the second norm
-*/
+ * @param id Id of the input
+ * @param inputName Name of the input
+ * @param optype Value of property "optype"
+ * @param dataType Value of property "dataType"
+ * @param orig1 Value of the first origin
+ * @param norm1 Value of the first norm
+ * @param orig2 Value of the second origin
+ * @param norm2 Value of the second norm
+ */
 void PMMLlib::AddNeuralInput(int id, std::string inputName, std::string optype,
                              std::string dataType, double orig1, double norm1,
                              double orig2, double norm2) {
@@ -1345,17 +1487,17 @@ void PMMLlib::AddNeuralInput(int id, std::string inputName, std::string optype,
 }
 
 /**
-* Add a NeuralOutput node to the current model.
-* @brief Specific to NeuralNetwork
-* @param outputNeuron Id of the output
-* @param outputName Name of the output
-* @param optype Value of property "optype"
-* @param dataType Value of property "dataType"
-* @param orig1 Value of the first origin
-* @param norm1 Value of the first norm
-* @param orig2 Value of the second origin
-* @param norm2 Value of the second norm
-*/
+ * Add a NeuralOutput node to the current model.
+ * @brief Specific to NeuralNetwork
+ * @param outputNeuron Id of the output
+ * @param outputName Name of the output
+ * @param optype Value of property "optype"
+ * @param dataType Value of property "dataType"
+ * @param orig1 Value of the first origin
+ * @param norm1 Value of the first norm
+ * @param orig2 Value of the second origin
+ * @param norm2 Value of the second norm
+ */
 void PMMLlib::AddNeuralOutput(int outputNeuron, std::string outputName,
                               std::string optype, std::string dataType,
                               double orig1, double norm1, double orig2,
@@ -1425,15 +1567,16 @@ void PMMLlib::AddNeuralOutput(int outputNeuron, std::string outputName,
 }
 
 /**
-* Add a NeuralLayer node to the current model.
+ * Add a NeuralLayer node to the current model.
  * @brief Specific to NeuralNetwork
-* @param activationFunction Activation function. One of kIDENTITY, kTANH,
-* kLOGISTIC.
-*/
+ * @param activationFunction Activation function. One of kIDENTITY, kTANH,
+ * kLOGISTIC.
+ */
 void PMMLlib::AddNeuralLayer(PMMLActivationFunction activationFunction) {
     CheckNeuralNetwork();
 
     string functionName;
+    functionName = "identity"; // Valeur par defaut
     switch (activationFunction) {
     case kIDENTITY:
         functionName = "identity";
@@ -1468,14 +1611,14 @@ void PMMLlib::AddNeuralLayer(PMMLActivationFunction activationFunction) {
 }
 
 /**
-* Add a NeuralLayer node to the current model.
+ * Add a NeuralLayer node to the current model.
  * @brief Specific to NeuralNetwork
-* @param id Id of the layer
-* @param bias Value of property "bias"
-* @param conNb Number of Con nodes
-* @param firstFrom Value of property "from" for the first Con
-* @param weights Vector of weights (One per Con node)
-*/
+ * @param id Id of the layer
+ * @param bias Value of property "bias"
+ * @param conNb Number of Con nodes
+ * @param firstFrom Value of property "from" for the first Con
+ * @param weights Vector of weights (One per Con node)
+ */
 void PMMLlib::AddNeuron(int id, double bias, int conNb, int firstFrom,
                         vector<double> weights) {
     CheckNeuralNetwork();
@@ -1521,18 +1664,18 @@ void PMMLlib::AddNeuron(int id, double bias, int conNb, int firstFrom,
 }
 
 /**
-* Fill the vectors used by the ExportXXX methods.
+ * Fill the vectors used by the ExportXXX methods.
  * @brief Specific to NeuralNetwork
-* @param nInput
-* @param nOutput
-* @param nHidden
-* @param normType
-* @param minInput
-* @param maxInput
-* @param minOutput
-* @param maxOutput
-* @param valW
-*/
+ * @param nInput
+ * @param nOutput
+ * @param nHidden
+ * @param normType
+ * @param minInput
+ * @param maxInput
+ * @param minOutput
+ * @param maxOutput
+ * @param valW
+ */
 void PMMLlib::fillVectorsForExport(int nInput, int nOutput, int nHidden,
                                    int normType, vector<double> &minInput,
                                    vector<double> &maxInput,
@@ -1634,7 +1777,7 @@ void PMMLlib::ExportNeuralNetworkCpp(std::string file, std::string functionName,
     fillVectorsForExport(nInput, nOutput, nHidden, normType, minInput, maxInput,
                          minOutput, maxOutput, valW);
     // Write the file
-    ofstream sourcefile(file.c_str());
+    std::ofstream sourcefile(file.c_str());
     // ActivationFunction
     if (normType == 0) { // kMinusOneOne
         sourcefile << "#define ActivationFunction(sum)         ( tanh(sum) )"
@@ -1806,7 +1949,7 @@ void PMMLlib::ExportNeuralNetworkFortran(std::string file,
     fillVectorsForExport(nInput, nOutput, nHidden, normType, minInput, maxInput,
                          minOutput, maxOutput, valW);
     // Write the file
-    ofstream sourcefile(file.c_str());
+    std::ofstream sourcefile(file.c_str());
 
     sourcefile << "      SUBROUTINE " << functionName << "(";
     for (int i = 0; i < GetNbInputs(); i++) {
@@ -1921,7 +2064,7 @@ void PMMLlib::ExportNeuralNetworkPython(std::string file,
                                         std::string header) {
     string str(ExportNeuralNetworkPyStr(functionName, header));
     // Write the file
-    ofstream exportfile(file.c_str());
+    std::ofstream exportfile(file.c_str());
     exportfile << str;
     exportfile.close();
 }
@@ -2175,12 +2318,15 @@ void PMMLlib::AddRegressionModel(std::string modelName,
  * @brief No property "intercept" will be set.
  * @brief Specific to RegressionModel
  */
-void PMMLlib::AddRegressionTable() {
+/*
+void PMMLlib::AddRegressionTable()
+{
     CheckRegression();
-    xmlNodePtr tableNode = xmlNewChild(_currentModelNode, 0,
-                                       (const xmlChar *)"RegressionModel", 0);
+    xmlNodePtr tableNode = xmlNewChild(_currentModelNode, 0,(const xmlChar*)
+"RegressionModel", 0);
     _currentNode = tableNode;
 }
+*/
 
 /**
  * Add a RegressionTable to the Regression model with a given value of property
@@ -2541,7 +2687,7 @@ void PMMLlib::ExportLinearRegressionCpp(std::string file,
     CheckRegression();
 
     // Write the file
-    ofstream exportfile(file.c_str());
+    std::ofstream exportfile(file.c_str());
 
     exportfile << "void " << functionName << "(double *param, double *res)"
                << endl;
@@ -2610,7 +2756,7 @@ void PMMLlib::ExportLinearRegressionFortran(std::string file,
     }
 
     // Write the file
-    ofstream exportfile(file.c_str());
+    std::ofstream exportfile(file.c_str());
 
     exportfile << "      SUBROUTINE " << functionName << "(";
     for (int i = 0; i < (nNumPred + nPredTerm); i++) {
@@ -2681,7 +2827,7 @@ void PMMLlib::ExportLinearRegressionPython(std::string file,
                                            std::string header) {
     string str(ExportLinearRegressionPyStr(functionName, header));
     // Write the file
-    ofstream exportfile(file.c_str());
+    std::ofstream exportfile(file.c_str());
     exportfile << str;
     exportfile.close();
 }
@@ -2788,6 +2934,608 @@ std::string PMMLlib::ReadRegressionStructure() {
     oss << nPred;
     structure = structureActive + "," + oss.str() + "," + structurePredicted;
     return structure;
+}
+//**************************************************************
+//                                                             *
+//                                                             *
+//                                                             *
+//  méthodes propres au Gaussian Process                        *
+//                                                             *
+//                                                             *
+//                                                             *
+//**************************************************************
+
+/*!
+ * Check if the current model type is kGAUSS
+ *    \brief Called in all methods specific to the GaussainProcess model.
+ *    \brief Throw an exception if the model type is not kGAUSS
+ */
+void PMMLlib::CheckGaussianProcess() {
+    if (_currentModelType != kGAUSS)
+        throw string("Use this method with Gaussian Process models.");
+}
+
+/**
+ * Get the XML node of a given gaussian process from the index
+ * @param index Index of the gaussian process
+ * @return Pointer to the XML node
+ */
+xmlNodePtr PMMLlib::GetGaussianProcessPtr(int index) {
+    return GetPtr(index, GetTypeString());
+}
+
+/**
+ * Get the XML node of a given gaussian process model
+ * @param name Name of the gaussian process
+ * @return Pointer to the XML node
+ */
+xmlNodePtr PMMLlib::GetGaussianProcessPtr(std::string name) {
+    return GetPtr(name, GetTypeString());
+}
+/**
+ * Add a NeuralNetwork node to the root node
+ * @brief Specific to NeuralNetwork
+ * @param modelName Model name
+ * @param functionName PMMLMiningFunction. One of : kREGRESSION.
+ */
+void PMMLlib::AddGaussianProcess(std::string modelName,
+                                 PMMLMiningFunction functionName) {
+    // std::cout << "modelName: " << modelName << std::endl;
+    _currentModelType = kGAUSS;
+    _currentModelName = modelName;
+
+    CheckGaussianProcess();
+
+    string function;
+    switch (functionName) {
+    case kREGRESSION:
+        function = "regression";
+        break;
+    }
+    // std::cout << "function " << function << std::endl;
+    xmlNodePtr gpNode =
+        xmlNewChild(_rootNode, 0, (const xmlChar *)"GaussianProcessModel", 0);
+    xmlNewProp(gpNode, (const xmlChar *)"modelName",
+               (const xmlChar *)(_currentModelName.c_str()));
+    xmlNewProp(gpNode, (const xmlChar *)"functionName",
+               (const xmlChar *)(function.c_str()));
+    _currentModelNode = gpNode;
+}
+
+std::string PMMLlib::GetKernelTypeString(PMMLKernelType kernel) {
+    std::string kernelName;
+
+    switch (kernel) {
+    case kRadialBasis:
+        kernelName = "RadialBasisKernel";
+        break;
+    case kARDSquaredExponential:
+        kernelName = "ARDSquaredExponentialKernel";
+        break;
+    case kAbsoluteExponential:
+        kernelName = "AbsoluteExponentialKernel";
+        break;
+    case kGeneralizedExponential:
+        kernelName = "GeneralizedExponentialKernel";
+        break;
+    }
+    return kernelName;
+}
+void PMMLlib::GetKernelList(std::vector<PMMLKernelType> &kernelList) {
+    kernelList.push_back(kRadialBasis);
+    kernelList.push_back(kARDSquaredExponential);
+    kernelList.push_back(kAbsoluteExponential);
+    kernelList.push_back(kGeneralizedExponential);
+}
+
+void PMMLlib::AddGaussianKernelType(PMMLKernelType kernel, double noiseVariance,
+                                    int n, double *lambda, double degre) {
+    std::string kernelName;
+    std::stringstream ss;
+    //----------------------------
+    CheckGaussianProcess();
+    kernelName = GetKernelTypeString(kernel);
+
+    xmlNodePtr newNode;
+    xmlNodePtr gpNode = _currentModelNode;
+    xmlNodePtr kernelNode =
+        xmlNewChild(gpNode, 0, (const xmlChar *)kernelName.c_str(), 0);
+
+    ss.precision(16);
+    ss << scientific;
+
+    ss.str("");
+    ss << 1.0;
+    xmlNewProp(kernelNode, (const xmlChar *)"gamma",
+               (const xmlChar *)(ss.str().c_str()));
+
+    ss.str("");
+    ss << scientific << noiseVariance;
+    xmlNewProp(kernelNode, (const xmlChar *)"noiseVariance",
+               (const xmlChar *)(ss.str().c_str()));
+
+    if (kernel == kRadialBasis) {
+        ss.str("");
+        ss << scientific << lambda[0];
+        xmlNewProp(kernelNode, (const xmlChar *)"lambda",
+                   (const xmlChar *)(ss.str().c_str()));
+    }
+    if (kernel == kGeneralizedExponential) {
+        ss.str("");
+        ss << scientific << degre;
+        xmlNewProp(kernelNode, (const xmlChar *)"degree",
+                   (const xmlChar *)(ss.str().c_str()));
+    } else {
+        xmlNodePtr lambdaNode =
+            xmlNewChild(kernelNode, 0, (const xmlChar *)"Lambda", 0);
+
+        xmlNodePtr ArrayNode =
+            xmlNewChild(lambdaNode, 0, (const xmlChar *)"Array", 0);
+        ss.str("");
+        ss << n;
+        xmlNewProp(ArrayNode, (const xmlChar *)"n",
+                   (const xmlChar *)(ss.str().c_str()));
+        xmlNewProp(ArrayNode, (const xmlChar *)"type", (const xmlChar *)"real");
+        ss.str("");
+        for (int i = 0; i < n - 1; i++)
+            ss << lambda[i] << " ";
+        ss << scientific << lambda[n - 1];
+        newNode = xmlNewText((const xmlChar *)(ss.str().c_str()));
+
+        xmlAddChild(ArrayNode, newNode);
+    }
+}
+void PMMLlib::AddTrainingInstances(int nS, int nX,
+                                   std::vector<std::string> inputNames,
+                                   std::string outputName, double *Xobs,
+                                   double *xNormParams, double *Yobs) {
+    //
+    int recordCount, fieldCount;
+    std::stringstream ss;
+    // ------------------
+    recordCount = nS;
+    fieldCount = nX + 1;
+
+    xmlNodePtr gpNode = _currentModelNode;
+    xmlNodePtr trainingNode =
+        xmlNewChild(gpNode, 0, (const xmlChar *)"TrainingInstances", 0);
+
+    xmlChar *xRecordCount = _stringToXmlChar(NumberToString<int>(recordCount));
+    xmlNewProp(trainingNode, (const xmlChar *)"recordCount", xRecordCount);
+    xmlFree(xRecordCount);
+
+    xmlChar *xFieldCount = _stringToXmlChar(NumberToString<int>(fieldCount));
+    xmlNewProp(trainingNode, (const xmlChar *)"fieldCount", xFieldCount);
+    xmlFree(xFieldCount);
+
+    xmlChar *xIsTransformed = _stringToXmlChar("false");
+    xmlNewProp(trainingNode, (const xmlChar *)"isTransformed", xIsTransformed);
+    xmlFree(xIsTransformed);
+
+    xmlNodePtr InstanceFieldsNode =
+        xmlNewChild(trainingNode, 0, (const xmlChar *)"InstanceFields", 0);
+    for (int j = 0; j < nX; j++) {
+        xmlNodePtr fieldNode = xmlNewChild(InstanceFieldsNode, 0,
+                                           (const xmlChar *)"InstanceField", 0);
+        xmlNewProp(fieldNode, (const xmlChar *)"field",
+                   (const xmlChar *)inputNames[j].c_str());
+        xmlNewProp(fieldNode, (const xmlChar *)"column",
+                   (const xmlChar *)inputNames[j].c_str());
+    }
+    xmlNodePtr fieldNode =
+        xmlNewChild(InstanceFieldsNode, 0, (const xmlChar *)"InstanceField", 0);
+    xmlNewProp(fieldNode, (const xmlChar *)"field",
+               (const xmlChar *)outputName.c_str());
+    xmlNewProp(fieldNode, (const xmlChar *)"column",
+               (const xmlChar *)outputName.c_str());
+    xmlNodePtr InlineTableNode =
+        xmlNewChild(trainingNode, 0, (const xmlChar *)"InlineTable", 0);
+
+    ss.precision(16);
+    for (int i = 0; i < nS; i++) {
+        xmlNodePtr rowNode =
+            xmlNewChild(InlineTableNode, 0, (const xmlChar *)"row", 0);
+        for (int j = 0; j < nX; j++) {
+            double vmin, vmax;
+            double valueR;
+
+            vmin = xNormParams[2 * j];
+            vmax = xNormParams[2 * j + 1];
+            valueR = vmin + (vmax - vmin) * Xobs[i * nX + j];
+
+            ss.str("");
+            ss << scientific << valueR;
+            xmlNodePtr valueNode = xmlNewChild(
+                rowNode, 0, (const xmlChar *)inputNames[j].c_str(), 0);
+            xmlNodePtr newNode =
+                xmlNewText((const xmlChar *)(ss.str().c_str()));
+            xmlAddChild(valueNode, newNode);
+        }
+        ss.str("");
+        ss << scientific << Yobs[i];
+        xmlNodePtr valueNode =
+            xmlNewChild(rowNode, 0, (const xmlChar *)outputName.c_str(), 0);
+        xmlNodePtr newNode = xmlNewText((const xmlChar *)(ss.str().c_str()));
+        xmlAddChild(valueNode, newNode);
+    }
+}
+void PMMLlib::importGaussianProcess(std::string modelName) {
+    std::string methodeName = "importGaussianProcess";
+    PMMLType modelType;
+    PMMLType modelTypeRef;
+    std::string modelNameRef;
+    // ------------------------------------
+    // std::cout << methodeName << ":" <<  modelName <<std::endl;
+    modelType = kGAUSS;
+    SearchForModel(modelTypeRef, modelNameRef);
+    // std::cout << modelTypeRef << ":" << modelNameRef << std::endl;
+
+    if (modelTypeRef != modelType) {
+        std::ostringstream ss;
+        ss << "Looking for model type " << modelType << ". Found "
+           << modelTypeRef;
+        throw(ss.str());
+    }
+    if (modelNameRef != modelName) {
+        std::ostringstream ss;
+        ss << "Looking for model Name: " << modelName << ". Found "
+           << modelNameRef;
+        throw(ss.str());
+    }
+
+    // std::cout << "modelType: " << modelType << "," << modelName << std::endl;
+
+    SetCurrentModel(modelName, modelType);
+}
+void PMMLlib::GetDataDictionary(int &nbFields,
+                                std::vector<std::string> &fieldNames,
+                                std::vector<bool> &intervalstatus,
+                                std::vector<double> &varMin,
+                                std::vector<double> &varMax) {
+    std::string methodeName = "GetDataDictionary";
+    bool debug = false;
+    // ---
+    // std::cout << methodeName << ":DEBUT:" << std::endl;
+
+    xmlNodePtr dataNode = GetChildByName(_rootNode, "DataDictionary");
+
+    nbFields = 0;
+    if (dataNode != NULL) {
+        xmlNodePtr dataFieldNode = GetChildByName(dataNode, "DataField");
+        if (dataFieldNode != NULL) {
+            while (dataFieldNode != NULL) {
+                nbFields += 1;
+
+                std::string name = _getProp(dataFieldNode, string("name"));
+                std::string displayName =
+                    _getProp(dataFieldNode, string("displayName"));
+                std::string optype = _getProp(dataFieldNode, string("optype"));
+                std::string dataType =
+                    _getProp(dataFieldNode, string("dataType"));
+
+                xmlNodePtr child = GetChildByName(dataFieldNode, "Interval");
+
+                bool intStatus;
+                double vmin, vmax;
+
+                intStatus = false;
+                vmin = 1.0e+20;
+                vmax = -1.0e+20;
+
+                if (child != NULL) {
+                    std::string closure = _getProp(child, string("closure"));
+                    std::string leftmargin =
+                        _getProp(child, string("leftMargin"));
+                    std::string rightmargin =
+                        _getProp(child, string("rightMargin"));
+                    // std::cout << closure << "[" << leftmargin << "," <<
+                    // rightmargin << "]" << endl;
+                    vmin = StringToNumber<double>(leftmargin);
+                    vmax = StringToNumber<double>(rightmargin);
+                    // std::cout << "Min: " << vmin << " Max: " << vmax <<
+                    // std::endl;
+                    intStatus = true;
+                }
+                if (debug) {
+                    std::ostringstream msgInterval, msgPres;
+                    msgInterval << "Min: " << scientific << vmin
+                                << " Max: " << scientific << vmax;
+                    msgPres << "Field: " << nbFields << " "
+                            << "Name: " << name << " " << displayName << " "
+                            << optype << " " << dataType;
+                    std::cout << msgPres.str() << "|" << msgInterval.str()
+                              << std::endl;
+                }
+
+                fieldNames.push_back(name);
+                intervalstatus.push_back(intStatus);
+                varMin.push_back(vmin);
+                varMax.push_back(vmax);
+
+                dataFieldNode = dataFieldNode->next;
+            }
+        } else {
+            std::cout << "No DataField item found" << std::endl;
+        }
+    } else {
+        std::cout << "No DataDictionary item found" << std::endl;
+    }
+}
+void PMMLlib::GetMiningSchema(std::set<std::string> &InputNames,
+                              std::set<std::string> &OutputNames) {
+    xmlNodePtr miningNode;
+    xmlNodePtr fieldsNode;
+
+    miningNode = GetChildByName(_currentModelNode, "MiningSchema");
+    if (miningNode != NULL) {
+        fieldsNode = GetChildByName(miningNode, "MiningField");
+        if (fieldsNode != NULL) {
+            while (fieldsNode != NULL) {
+                std::string name, usage;
+                name = _getProp(fieldsNode, string("name"));
+                usage = _getProp(fieldsNode, string("usageType"));
+                if (usage == "active") {
+                    InputNames.insert(name);
+                } else if (usage == "predicted") {
+                    OutputNames.insert(name);
+                } else {
+                    std::string msg;
+                    msg = "Variable " + name +
+                          " unknown status (active,predicted): " + usage;
+                    throw(msg);
+                }
+                fieldsNode = fieldsNode->next;
+            }
+        } else {
+            std::string msg = "No MiningField item found";
+            throw(msg);
+        }
+    } else {
+        std::string msg = "No MiningSchema item found";
+        throw(msg);
+    }
+}
+void PMMLlib::GetGaussianKernelType(PMMLKernelType &kernel,
+                                    double &noiseVariance, int &n,
+                                    std::vector<double> &lambda,
+                                    double &degre) {
+    xmlNodePtr kernelNode, lambdaNode, arrayNode;
+    std::vector<PMMLKernelType> kernelList;
+    std::string kernelName;
+    std::string lambdaString, dimString;
+    xmlChar *xmlinfo;
+    bool debug = false;
+    // ---------------------------------------------------
+    GetKernelList(kernelList);
+    degre = 1.0;
+
+    kernelName = "";
+    kernelNode = NULL;
+    for (unsigned int i = 0; i < kernelList.size(); i++) {
+        kernel = kernelList[i];
+        kernelName = GetKernelTypeString(kernel);
+        kernelNode = GetChildByName(_currentModelNode, kernelName);
+        if (kernelNode != NULL)
+            break;
+    }
+    if (kernelNode == NULL) {
+        std::string msg;
+        msg = "No Kernel found!!";
+        throw(msg);
+    }
+
+    noiseVariance =
+        StringToNumber<double>(_getProp(kernelNode, string("noiseVariance")));
+    if (kernel == kGeneralizedExponential) {
+        degre = StringToNumber<double>(_getProp(kernelNode, string("degree")));
+    }
+    if (debug) {
+        std::cout << "KernelName: " << kernelName << std::endl;
+        std::cout << "NoiseVariance: " << scientific << noiseVariance
+                  << std::endl;
+        std::cout << "Degre: " << scientific << degre << std::endl;
+    }
+
+    lambdaNode = GetChildByName(kernelNode, "Lambda");
+    arrayNode = GetChildByName(lambdaNode, "Array");
+
+    dimString = _getProp(arrayNode, string("n"));
+    n = StringToNumber<int>(dimString);
+    if (debug)
+        std::cout << "DimE: " << n << std::endl;
+
+    xmlinfo = xmlNodeListGetString(_doc, arrayNode->children, 1);
+
+    if (xmlinfo == NULL) {
+        std::string msg;
+        msg = "No Text associated to Array node";
+        throw(msg);
+    }
+
+    lambdaString = _xmlCharToString(xmlinfo);
+    xmlFree(xmlinfo);
+
+    std::istringstream ss(lambdaString);
+    std::string token;
+    while (getline(ss, token, ' ')) {
+        double value;
+        value = StringToNumber<double>(token);
+        lambda.push_back(value);
+    }
+}
+
+void PMMLlib::GetTrainingInstances(
+    std::map<std::string, std::vector<double>> &table, int &recordCount) {
+    xmlNodePtr instancesNode, fieldNode;
+    xmlNodePtr trainingNode;
+    xmlNodePtr inlineTabNode;
+    xmlNodePtr rowNode;
+    int fieldCount;
+    bool isTransformed;
+    std::string field;
+    std::vector<std::string> tabField;
+    std::map<std::string, std::vector<double>>::iterator mapIt;
+    // -------------------------
+    trainingNode = GetChildByName(_currentModelNode, "TrainingInstances");
+
+    recordCount =
+        StringToNumber<int>(_getProp(trainingNode, string("recordCount")));
+    fieldCount =
+        StringToNumber<int>(_getProp(trainingNode, string("fieldCount")));
+    //
+    instancesNode = GetChildByName(trainingNode, "InstanceFields");
+    if (instancesNode != NULL) {
+        fieldNode = GetChildByName(instancesNode, "InstanceField");
+        if (fieldNode != NULL) {
+            while (fieldNode != NULL) {
+                field = _getProp(fieldNode, string("field"));
+                tabField.push_back(field);
+                // std::cout << "Field: " << field << std::endl;
+                fieldNode = fieldNode->next;
+                table[field];
+            }
+        } else {
+            std::string msg = "No InstanceField item found";
+            throw(msg);
+        }
+
+    } else {
+        std::string msg = "No InstanceFields item found";
+        throw(msg);
+    }
+
+    inlineTabNode = GetChildByName(trainingNode, "InlineTable");
+    if (inlineTabNode != NULL) {
+        rowNode = GetChildByName(inlineTabNode, "row");
+        if (rowNode != NULL) {
+            while (rowNode != NULL) {
+                // std::cout << "Row: " << std::endl;
+                for (unsigned int i = 0; i < tabField.size(); i++) {
+                    xmlNodePtr valNode;
+                    xmlChar *xmlinfo;
+                    //
+                    valNode = GetChildByName(rowNode, tabField[i].c_str());
+                    xmlinfo = xmlNodeListGetString(_doc, valNode->children, 1);
+
+                    if (xmlinfo == NULL) {
+                        std::string msg;
+                        msg = "No Text associated to Array node";
+                        throw(msg);
+                    }
+
+                    std::string valString = _xmlCharToString(xmlinfo);
+                    double value = StringToNumber<double>(valString);
+                    // std::cout << tabField[i] << ":" << value << std::endl;
+                    table[tabField[i]].push_back(value);
+                    xmlFree(xmlinfo);
+                }
+                rowNode = rowNode->next;
+            }
+        } else {
+            std::string msg = "No row item found";
+            throw(msg);
+        }
+    } else {
+        std::string msg = "No InlineTable item found";
+        throw(msg);
+    }
+}
+void PMMLlib::GetGaussianProcess(
+    std::vector<std::string> fieldNames, std::set<std::string> &InputNames,
+    std::set<std::string> &OutputNames, PMMLKernelType &kernel, int &ndimE,
+    double &noiseVariance, std::vector<double> &lambda, int &recordCount,
+    std::map<std::string, std::vector<double>> &table) {
+    (void)(fieldNames);
+    //
+    bool debug = false;
+    double degree;
+    std::map<std::string, std::vector<double>>::iterator mapIt;
+    // ------------------------
+
+    GetMiningSchema(InputNames, OutputNames);
+
+    GetGaussianKernelType(kernel, noiseVariance, ndimE, lambda, degree);
+
+    GetTrainingInstances(table, recordCount);
+    // --------------
+    // std::cout << "Input Space Dimension: " << ndimE << " NoiseVariance: " <<
+    // noiseVariance << std::endl;
+    // for(int i=0; i<ndimE;i++){
+    //  std::cout << "lambda["<<i<<"] " << lambda[i] << std::endl;
+    //}
+
+    if (debug) {
+        for (mapIt = table.begin(); mapIt != table.end(); mapIt++) {
+            std::string name;
+            double sumField, meanField;
+            std::vector<double>::iterator vecItmin, vecItmax;
+            int nbelement;
+            //
+
+            name = mapIt->first;
+            nbelement = mapIt->second.size();
+            sumField = std::accumulate(mapIt->second.begin(),
+                                       mapIt->second.end(), 0.0e+00);
+            meanField = sumField / double(nbelement);
+            vecItmin =
+                std::min_element(mapIt->second.begin(), mapIt->second.end());
+            vecItmax =
+                std::max_element(mapIt->second.begin(), mapIt->second.end());
+
+            if (nbelement != recordCount) {
+                std::ostringstream smsg;
+                smsg << "Variable: " << name << std::endl;
+                smsg << "Incompatible number of record. " << recordCount
+                     << " were specified. " << nbelement << " were found";
+                throw(smsg.str());
+            }
+            std::ostringstream oss;
+            oss.precision(16);
+            oss << name << " "
+                << "Nb: " << nbelement << " Mean: " << scientific << meanField;
+            oss << " Sum: " << scientific << sumField << " Min:" << scientific
+                << *vecItmin << " Max: " << scientific << *vecItmax;
+            std::cout << oss.str() << std::endl;
+        }
+    }
+}
+
+//**************************************************************
+//                                                             *
+//                                                             *
+//                                                             *
+//  méthodes propres au Bayesian Network                       *
+//                                                             *
+//                                                             *
+//                                                             *
+//**************************************************************
+
+/*!
+ * Check if the current model type is kBAYESIAN
+ *    \brief Called in all methods specific to the Bayesian Network model.
+ *    \brief Throw an exception if the model type is not kBAYESIAN
+ */
+void PMMLlib::CheckBayesianNetwork() {
+    if (_currentModelType != kBAYESIAN)
+        throw string("Use this method with Bayesian Network models.");
+}
+
+/**
+ * Get the XML node of a given bayesian network from the index
+ * @param index Index of the bayesian network
+ * @return Pointer to the XML node
+ */
+xmlNodePtr PMMLlib::GetBayesianNetPtr(int index) {
+    return GetPtr(index, GetTypeString());
+}
+
+/**
+ * Get the XML node of a given bayesian network model
+ * @param name Name of the bayesian network
+ * @return Pointer to the XML node
+ */
+xmlNodePtr PMMLlib::GetBayesianNetPtr(std::string name) {
+    return GetPtr(name, GetTypeString());
 }
 
 } // end of namespace

@@ -18,7 +18,7 @@
 # or email : webmaster.salome@opencascade.com
 #
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.4.3 FATAL_ERROR)
 
 PROJECT(PMMLlib)
 

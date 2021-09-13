@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////
-// Copyright (C) 2013-2020 CEA/DES
+// Copyright (C) 2013-2021 CEA/DES
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published
@@ -14,17 +14,11 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////
-/*!
-  \file   PMMLlib.hxx
-  \author InckA
-  \date   Wed Nov 20 11:04:17 2013
-
-  \brief  Header de la classe PMMLlib
-
-*/
 
 #ifndef __PMMLLIB_H__
 #define __PMMLLIB_H__
+
+#include "PMMLwin.hxx"
 
 struct _xmlDoc;
 typedef struct _xmlDoc *xmlDocPtr;
@@ -37,6 +31,7 @@ typedef unsigned char xmlChar;
 #include <sstream>
 #include <string>
 #include <vector>
+#include <libxml/xpathInternals.h>
 
 namespace PMMLlib {
 
@@ -106,33 +101,33 @@ class PMMLlib {
      *  @{
      */
   public:
-    PMMLlib(std::string file, bool log = false);
-    PMMLlib(bool log = false);
-    ~PMMLlib();
+    PMMLLIB_EXPORT PMMLlib(std::string file, bool log = false);
+    PMMLLIB_EXPORT PMMLlib(bool log = false);
+    PMMLLIB_EXPORT ~PMMLlib();
 
-    void SearchForModel(PMMLType &modelType, std::string &modelName);
+    PMMLLIB_EXPORT void SearchForModel(PMMLType &modelType, std::string &modelName);
 
-    void SetCurrentModel(std::string modelName, PMMLType type);
-    void SetCurrentModel(std::string modelName);
-    void SetCurrentModel();
-    std::string makeLog() const;
-    void printLog() const;
+    PMMLLIB_EXPORT void SetCurrentModel(std::string modelName, PMMLType type);
+    PMMLLIB_EXPORT void SetCurrentModel(std::string modelName);
+    PMMLLIB_EXPORT void SetCurrentModel();
+    PMMLLIB_EXPORT std::string makeLog() const;
+    PMMLLIB_EXPORT void printLog() const;
 
-    void AddDataField(std::string name, std::string displayName,
+    PMMLLIB_EXPORT void AddDataField(std::string name, std::string displayName,
                       std::string optype, std::string dataType,
                       std::string closure, double leftMargin,
                       double rightMargin, bool interval = false);
-    void AddMiningSchema(std::string name, std::string usageType);
-    void SetHeader(std::string copyright, std::string description,
+    PMMLLIB_EXPORT void AddMiningSchema(std::string name, std::string usageType);
+    PMMLLIB_EXPORT void SetHeader(std::string copyright, std::string description,
                    std::string appName, std::string appVersion,
                    std::string annotation);
-    void UnlinkNode();
-    void BackupNode();
-    int GetModelsNb();
-    void Write();
-    void Write(std::string file);
-    PMMLType GetCurrentModelType();
-    std::string GetCurrentModelName();
+    PMMLLIB_EXPORT void UnlinkNode();
+    PMMLLIB_EXPORT void BackupNode();
+    PMMLLIB_EXPORT int GetModelsNb();
+    PMMLLIB_EXPORT void Write();
+    PMMLLIB_EXPORT void Write(std::string file);
+    PMMLLIB_EXPORT PMMLType GetCurrentModelType();
+    PMMLLIB_EXPORT std::string GetCurrentModelName();
 
   private:
     xmlNodePtr GetChildByName(xmlNodePtr node, std::string nodename);
@@ -158,31 +153,31 @@ class PMMLlib {
      *  @{
      */
   public:
-    void AddNeuralNetwork(std::string modelName,
+    PMMLLIB_EXPORT void AddNeuralNetwork(std::string modelName,
                           PMMLMiningFunction functionName);
-    void AddNeuralInput(int id, std::string inputName, std::string optype,
+    PMMLLIB_EXPORT void AddNeuralInput(int id, std::string inputName, std::string optype,
                         std::string dataType, double orig1, double norm1,
                         double orig2, double norm2);
-    void AddNeuralLayer(PMMLActivationFunction activationFunction);
-    void AddNeuron(int id, double bias, int conNb, int firstFrom,
+    PMMLLIB_EXPORT void AddNeuralLayer(PMMLActivationFunction activationFunction);
+    PMMLLIB_EXPORT void AddNeuron(int id, double bias, int conNb, int firstFrom,
                    std::vector<double> weights);
-    void AddNeuralOutput(int outputNeuron, std::string outputName,
+    PMMLLIB_EXPORT void AddNeuralOutput(int outputNeuron, std::string outputName,
                          std::string optype, std::string dataType, double orig1,
                          double norm1, double orig2, double norm2);
-    int GetNbInputs();
-    int GetNbOutputs();
-    std::string GetNameInput(int input_index);
-    std::string GetNameOutput(int output_index);
-    int GetNormalizationType();
-    void GetNormalisationInput(int input_index, double *dnorm);
-    void GetNormalisationOutput(int output_index, double *dnorm);
-    int GetNbHiddenLayers();
-    int GetNbLayers();
-    int GetNbNeuronsAtLayer(int layer_index);
-    double GetNeuronBias(int layer_index, int neu_index);
-    double GetPrecNeuronSynapse(int layer_index, int neu_index, int prec_index);
-    void SetNeuralNetName(int ann_index, std::string ann_name);
-    std::string ReadNetworkStructure();
+    PMMLLIB_EXPORT int GetNbInputs();
+    PMMLLIB_EXPORT int GetNbOutputs();
+    PMMLLIB_EXPORT std::string GetNameInput(int input_index);
+    PMMLLIB_EXPORT std::string GetNameOutput(int output_index);
+    PMMLLIB_EXPORT int GetNormalizationType();
+    PMMLLIB_EXPORT void GetNormalisationInput(int input_index, double *dnorm);
+    PMMLLIB_EXPORT void GetNormalisationOutput(int output_index, double *dnorm);
+    PMMLLIB_EXPORT int GetNbHiddenLayers();
+    PMMLLIB_EXPORT int GetNbLayers();
+    PMMLLIB_EXPORT int GetNbNeuronsAtLayer(int layer_index);
+    PMMLLIB_EXPORT double GetNeuronBias(int layer_index, int neu_index);
+    PMMLLIB_EXPORT double GetPrecNeuronSynapse(int layer_index, int neu_index, int prec_index);
+    PMMLLIB_EXPORT void SetNeuralNetName(int ann_index, std::string ann_name);
+    PMMLLIB_EXPORT std::string ReadNetworkStructure();
 
   private:
     xmlNodePtr GetNeuralNetPtr(std::string ann_name);
@@ -195,27 +190,27 @@ class PMMLlib {
      *  @{
      */
   public:
-    void AddRegressionModel(std::string modelName,
+    PMMLLIB_EXPORT void AddRegressionModel(std::string modelName,
                             PMMLMiningFunction functionName,
                             std::string targetFieldName);
     // void AddRegressionTable();
-    void AddRegressionTable(double intercept = 0.0);
-    void AddNumericPredictor(std::string neuronName, int exponent,
+    PMMLLIB_EXPORT void AddRegressionTable(double intercept = 0.0);
+    PMMLLIB_EXPORT void AddNumericPredictor(std::string neuronName, int exponent,
                              double coefficient);
-    void AddPredictorTerm(double coefficient,
+    PMMLLIB_EXPORT void AddPredictorTerm(double coefficient,
                           std::vector<std::string> fieldRef);
-    bool HasIntercept();
-    double GetRegressionTableIntercept();
-    int GetNumericPredictorNb();
-    int GetPredictorTermNb();
-    std::string GetNumericPredictorName(int num_pred_index);
-    std::string GetPredictorTermName(int num_pred_index);
-    double GetNumericPredictorCoefficient(int num_pred_index);
-    double GetPredictorTermCoefficient(int pred_term_index);
-    int GetPredictorTermFieldRefNb(int pred_term_index);
-    std::string GetPredictorTermFieldRefName(int pred_term_index,
+    PMMLLIB_EXPORT bool HasIntercept();
+    PMMLLIB_EXPORT double GetRegressionTableIntercept();
+    PMMLLIB_EXPORT int GetNumericPredictorNb();
+    PMMLLIB_EXPORT int GetPredictorTermNb();
+    PMMLLIB_EXPORT std::string GetNumericPredictorName(int num_pred_index);
+    PMMLLIB_EXPORT std::string GetPredictorTermName(int num_pred_index);
+    PMMLLIB_EXPORT double GetNumericPredictorCoefficient(int num_pred_index);
+    PMMLLIB_EXPORT double GetPredictorTermCoefficient(int pred_term_index);
+    PMMLLIB_EXPORT int GetPredictorTermFieldRefNb(int pred_term_index);
+    PMMLLIB_EXPORT std::string GetPredictorTermFieldRefName(int pred_term_index,
                                              int field_index);
-    std::string ReadRegressionStructure();
+    PMMLLIB_EXPORT std::string ReadRegressionStructure();
 
   private:
     xmlNodePtr GetRegressionPtr(int reg_index);
@@ -229,32 +224,32 @@ class PMMLlib {
      *  @{
      */
   public:
-    void importGaussianProcess(std::string modelName);
+    PMMLLIB_EXPORT void importGaussianProcess(std::string modelName);
 
-    std::string GetKernelTypeString(PMMLKernelType kernel);
+    PMMLLIB_EXPORT std::string GetKernelTypeString(PMMLKernelType kernel);
 
-    void AddGaussianProcess(std::string modelName,
+    PMMLLIB_EXPORT void AddGaussianProcess(std::string modelName,
                             PMMLMiningFunction functionName);
-    void AddGaussianKernelType(PMMLKernelType kernel, double noiseVariance,
+    PMMLLIB_EXPORT void AddGaussianKernelType(PMMLKernelType kernel, double noiseVariance,
                                int n, double *lambda, double degre = 1);
-    void AddTrainingInstances(int nS, int nX,
+    PMMLLIB_EXPORT void AddTrainingInstances(int nS, int nX,
                               std::vector<std::string> inputNames,
                               std::string outputName, double *Xobs,
                               double *xNormParams, double *Yobs);
 
-    void GetDataDictionary(int &nbFields, std::vector<std::string> &fieldNames,
+    PMMLLIB_EXPORT void GetDataDictionary(int &nbFields, std::vector<std::string> &fieldNames,
                            std::vector<bool> &intervalstatus,
                            std::vector<double> &varMin,
                            std::vector<double> &varMax);
-    void GetMiningSchema(std::set<std::string> &InputNames,
+    PMMLLIB_EXPORT void GetMiningSchema(std::set<std::string> &InputNames,
                          std::set<std::string> &OutputNames);
-    void GetGaussianKernelType(PMMLKernelType &kernel, double &noiseVariance,
+    PMMLLIB_EXPORT void GetGaussianKernelType(PMMLKernelType &kernel, double &noiseVariance,
                                int &n, std::vector<double> &lambda,
                                double &degre);
-    void GetTrainingInstances(std::map<std::string, std::vector<double>> &table,
+    PMMLLIB_EXPORT void GetTrainingInstances(std::map<std::string, std::vector<double>> &table,
                               int &recordCount);
 
-    void GetGaussianProcess(std::vector<std::string> fieldNames,
+    PMMLLIB_EXPORT void GetGaussianProcess(std::vector<std::string> fieldNames,
                             std::set<std::string> &InputNames,
                             std::set<std::string> &OutputNames,
                             PMMLKernelType &kernel, int &ndimE,
@@ -293,13 +288,13 @@ class PMMLlib {
                               std::vector<double> &valW);
 
   public:
-    void ExportCpp(std::string file, std::string functionName,
+    PMMLLIB_EXPORT void ExportCpp(std::string file, std::string functionName,
                    std::string header);
-    void ExportFortran(std::string file, std::string functionName,
+    PMMLLIB_EXPORT void ExportFortran(std::string file, std::string functionName,
                        std::string header);
-    void ExportPython(std::string file, std::string functionName,
+    PMMLLIB_EXPORT void ExportPython(std::string file, std::string functionName,
                       std::string header);
-    std::string ExportPyStr(std::string functionName, std::string header);
+    PMMLLIB_EXPORT std::string ExportPyStr(std::string functionName, std::string header);
 
   private:
     void ExportNeuralNetworkCpp(std::string file, std::string functionName,

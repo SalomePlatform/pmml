@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright (C) 2007-2020  CEA/DEN, EDF R&D
+# Copyright (C) 2007-2021  CEA/DEN, EDF R&D
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -19,19 +19,23 @@
 # See http://www.salome-platform.org/ or email : webmaster.salome@opencascade.com
 #
 
-# imports Salomé
+# imports Salome
 from PMML import PMMLlib, kANN, kLR
 
 # imports python
 import unittest
 import os
 import shutil
+import platform
 
 class PMMLBasicsTest(unittest.TestCase):
 
     def setUp(self):
         self.resourcesDir = ".." + os.sep + "Test" + os.sep + "samples" + os.sep ;
-        self.tmpDir = os.sep + "tmp" + os.sep + os.environ['LOGNAME'] + os.sep ;
+        if platform.system() == "Windows" :
+            self.tmpDir = os.environ['TMP'] # %TMP% does exist on WINDOWS
+        else:
+            self.tmpDir = os.sep + "tmp" + os.sep + os.environ['LOGNAME'] + os.sep ;
         self.tmpDir += "PmmlUnitTest";
         self.tmpDir += os.sep ;
         if ( not os.path.exists(self.tmpDir) ):

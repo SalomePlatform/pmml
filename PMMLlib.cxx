@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////
-// Copyright (C) 2013-2020 CEA/DES
+// Copyright (C) 2013-2021 CEA/DES
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published
@@ -14,14 +14,6 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////
-/*!
- \file   PMMLlib.cxx
- \author Incka
- \date   Wed Nov 20 11:04:17 2013
-
- \brief  Implémentation de la classe PMMLlib
-
- */
 
 // includes Salomé
 #include "PMMLlib.hxx"

@@ -17,13 +17,39 @@
 // See http://www.salome-platform.org/ or email : webmaster.salome@opencascade.com
 //
 
-#ifndef __UNITTESTTOOLS_HXX__
-#define __UNITTESTTOOLS_HXX__
 
-#include <string>
+#ifndef _PMMLWIN_HXX_
 
-   
-int areFilesEqual(const std::string & fileName, std::string otherFileName);
+#define _PMMLWIN_HXX_
+
+
+#ifdef WIN32
+
+#  if defined pmmlLib_EXPORTS
+
+#    define PMMLLIB_EXPORT __declspec( dllexport )
+
+#  else
+
+#    define PMMLLIB_EXPORT __declspec( dllimport )
+
+#  endif
+
+#else
+
+#  define PMMLLIB_EXPORT
+
+#endif
+
+
+
+#ifdef WIN32
+
+#pragma warning( disable : 4290 )
+
+#endif
+
 
 
 #endif
+

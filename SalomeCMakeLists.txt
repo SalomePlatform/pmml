@@ -37,6 +37,8 @@
 # Common SALOME CMake macros
 # ==========================
 
+SET(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
 SET(CONFIGURATION_ROOT_DIR $ENV{CONFIGURATION_ROOT_DIR} CACHE PATH
     "Path to Salome CMake configuration files")
 IF(EXISTS ${CONFIGURATION_ROOT_DIR})

@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <libxml/parser.h>
 #include <libxml/xpathInternals.h>
 #include <numeric>
 #include <sstream>
